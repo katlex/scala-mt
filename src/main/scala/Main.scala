@@ -1,5 +1,8 @@
+import java.text.SimpleDateFormat
 import org.zeromq.ZMQ
 import org.zeromq.ZMQ.Poller
+import scala.concurrent.duration._
+import com.katlex.utils._
 
 object Main extends App {
 
@@ -20,6 +23,12 @@ object Main extends App {
 
   input.subscribe("tick".getBytes())
 
+  def poller = {
+    val p = ctx.poller()
+    p setTimeout (1 second).toMicros
+    p
+  }
+
   def doQuit() = {
     val quit = ctx.socket(ZMQ.REQ)
     quit connect QUIT
@@ -29,27 +38,40 @@ object Main extends App {
 
   def runCycle = {
     var cmd = 1
-    val poller = ctx.poller()
-    poller.setTimeout(500)
-    poller.register(input, Poller.POLLIN)
-    poller.register(command, Poller.POLLOUT)
-    poller.register(quit, Poller.POLLIN)
-    do {
-      if (poller.pollin(0)) {
-        val bytes = input.recv(0)
-        println(new String(bytes, "UTF-8"))
+    val dateFormat = new SimpleDateFormat("dd-MM-YYYY hh:mm")
+    val inPoller = poller
+    inPoller.register(input, Poller.POLLIN)
+    inPoller.register(quit, Poller.POLLIN)
+    val outPoller = poller
+    outPoller.register(command, Poller.POLLOUT)
 
-        if (poller.pollout(1)) {
+    do {
+      if (inPoller.pollin(0)) {
+        val bytes = input.recv(0)
+        val data = new String(bytes, "UTF-8").split(" ").toList match {
+          case "tick" :: Unapply.BigDecimal(bid) :: Unapply.BigDecimal(ask) :: Unapply.Date(date) :: Nil =>
+            println (s"${dateFormat.format(date)} Ask: $ask Bid: $bid Spread: ${ask - bid}")
+        }
+
+        outPoller.poll()
+        if (outPoller.pollout(0)) {
           command.send(s"cmd #$cmd".getBytes(), ZMQ.NOBLOCK)
           cmd += 1
         }
       }
+      inPoller.poll()
+    } while (!inPoller.pollin(1))
+  }
+
+  new Thread() {
+    override def run = {
       if (System.in.read() != -1) {
         doQuit()
       }
-      poller.poll()
-    } while (!poller.pollin(2))
-  }
+      Thread.sleep(500)
+    }
+    setDaemon(true)
+  } .start()
 
   println("Running main cycle press any key to quit...")
   runCycle
