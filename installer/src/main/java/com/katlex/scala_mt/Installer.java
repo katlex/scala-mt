@@ -1,24 +1,33 @@
+package com.katlex.scala_mt;
+
 import javax.swing.*;
-import java.awt.*;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLConnection;
 
 public class Installer {
 
     private JFrame frame;
+    private DownloadForm downloadForm = new DownloadForm();
+
+    public static String SBT_LAUNCHER_DEST = path(
+            System.getProperty("user.home"),
+            "sbt.jar"
+    );
 
     public static void main(String... args) {
         new Installer().run();
     }
 
     private void run() {
-        frame = new JFrame("Installing Scala MT bridge");
+        frame = new JFrame("Scala MT bridge");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        buildContent();
+        frame.getContentPane().add(downloadForm.getContainer());
         frame.pack();
-        center();
+        frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+        frame.setResizable(false);
         downloadLauncher();
     }
 
@@ -29,17 +38,28 @@ public class Installer {
             URL url = new URL(
                     "http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/0.13.2/sbt-launch.jar"
             );
-            inputStream = url.openStream();
-            String path = System.getProperty("user.home") + File.separator + "sbt.jar";
+            URLConnection connection = url.openConnection();
+            connection.connect();
+            int total = connection.getHeaderFieldInt("Content-Length", -1);
+            System.out.println(String.format("Content size is: %d", total));
+            JProgressBar downloadProgress = downloadForm.getDownloadProgress();
+            if (total > -1) {
+                downloadProgress.setMaximum(total);
+            }
+            inputStream = connection.getInputStream();
+            String path = SBT_LAUNCHER_DEST;
             System.out.println(String.format("Downloading the launcher to %s", path));
             outputStream = new FileOutputStream(path);
 
-            final int BUF_SIZE = 100 * 1024;
+            final int BUF_SIZE = 1024;
             byte [] buffer = new byte[BUF_SIZE];
-            int numRead = inputStream.read(buffer);
-            while (numRead > -1) {
+            int numRead;
+            int loaded = 0;
+            while ((numRead = inputStream.read(buffer)) > -1) {
                 outputStream.write(buffer, 0, numRead);
-                numRead = inputStream.read(buffer);
+                if (total > -1) {
+                    downloadProgress.setValue(loaded += numRead);
+                }
             }
 
             System.out.println("Download complete successfully");
@@ -61,29 +81,7 @@ public class Installer {
         }
     }
 
-    private void buildContent() {
-        JPanel panel = new JPanel();
-        Dimension size = new Dimension(500, 100);
-        panel.setMinimumSize(size);
-        panel.setPreferredSize(size);
-        JLabel label = new JLabel("Downloading sbt-launcher.jar");
-        panel.add(label);
-        JButton ok = new JButton("OK");
-        panel.add(ok);
-        frame.getContentPane().add(panel);
+    private static String path(String... args) {
+        return Arrays.mkString(args, File.separator);
     }
-
-    private void center() {
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        Dimension frameSize = frame.getSize();
-        frame.setLocation(
-                (screenSize.width - frameSize.width) / 2,
-                (screenSize.height - frameSize.height) / 2
-        );
-
-        System.out.println(
-                String.format("Width: %s, height: %s", frameSize.width, frameSize.height)
-        );
-    }
-
 }

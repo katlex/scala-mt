@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object Settings {
-  lazy val Defaults = Seq {
+  lazy val Globals = Seq {
     organization := "com.katlex.scala-mt"
   }
 }
@@ -12,5 +12,5 @@ object TheProject extends Build {
     lazy val installer = project( "installer", file("installer"))
 
     protected def project(name: String, base:sbt.File) =
-      Project(id = name, base = base) settings (Settings.Defaults: _*) settings (Keys.moduleName := name)
+      Project(id = name, base = base) settings (Settings.Globals: _*) settings (Keys.moduleName := name)
 }
