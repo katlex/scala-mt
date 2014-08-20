@@ -2,10 +2,6 @@ name := "Scala MT4 bridge"
 
 description := "An MQL4 expert and scala library allowing writing experts in scala"
 
-organization := "com.katlex"
-
-moduleName := "scala-mt"
-
 version := "1.0-SNAPSHOT"
 
 scalaVersion := "2.10.0-RC5"
