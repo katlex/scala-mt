@@ -1,6 +1,8 @@
 package com.katlex.scala_mt;
 
 import javax.swing.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -22,22 +24,45 @@ public class Installer {
 
     private void run() {
         frame = new JFrame("Scala MT bridge");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         frame.getContentPane().add(downloadForm.getContainer());
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
         frame.setResizable(false);
-        downloadLauncher();
+        
+        final Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                downloadLauncher();
+            }
+        }, "Downloader");
+        t.start();
+        
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent e) {
+                t.interrupt();
+            }
+        });
+    }
+    
+    private URL createUrl(String url) {
+        try {
+            return new URL(url);
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void downloadLauncher() {
         InputStream inputStream = null;
         OutputStream outputStream = null;
+        URL url = createUrl(
+                "http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/0.13.2/sbt-launch.jar"
+        );
+        
         try {
-            URL url = new URL(
-                    "http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/0.13.2/sbt-launch.jar"
-            );
             URLConnection connection = url.openConnection();
             connection.connect();
             int total = connection.getHeaderFieldInt("Content-Length", -1);
@@ -47,11 +72,11 @@ public class Installer {
                 downloadProgress.setMaximum(total);
             }
             inputStream = connection.getInputStream();
-            String path = SBT_LAUNCHER_DEST;
-            System.out.println(String.format("Downloading the launcher to %s", path));
-            outputStream = new FileOutputStream(path);
+            String targetPath = SBT_LAUNCHER_DEST;
+            System.out.println(String.format("Downloading the launcher to %s", targetPath));
+            outputStream = new FileOutputStream(targetPath);
 
-            final int BUF_SIZE = 1024;
+            final int BUF_SIZE = 512;
             byte [] buffer = new byte[BUF_SIZE];
             int numRead;
             int loaded = 0;
@@ -60,13 +85,20 @@ public class Installer {
                 if (total > -1) {
                     downloadProgress.setValue(loaded += numRead);
                 }
+                if (Thread.interrupted()) {
+                    break;
+                }
             }
 
-            System.out.println("Download complete successfully");
-        } catch (MalformedURLException e) {
-            throw new RuntimeException("This shouldn't ever happen!", e);
+            if (loaded == total) {
+                System.out.println("Download complete successfully");
+            }
+            else {
+                System.out.println("Download interrupted by the user");
+                new File(targetPath).delete();
+            }
         } catch (IOException e) {
-            System.err.println(String.format("Failed to read URL: %s", e.getMessage()));
+            System.err.printf("Failed to read the URL: %s\n", url.toString());
         }
         finally {
             try {
@@ -77,7 +109,10 @@ public class Installer {
                     outputStream.close();
                 }
             }
-            catch (IOException e) {}
+            catch (IOException e) {
+                System.out.printf("Failed while closing streams %s", e.getMessage());
+                e.printStackTrace();
+            }
         }
     }
 
